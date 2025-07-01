@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real Web Visitor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        textarea, input, select {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #4285F4;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:disabled {
+            background: #cccccc;
+        }
+        #preview-container {
+            position: relative;
+            height: 500px;
+            border: 1px solid #ddd;
+            margin: 20px 0;
+            background: #f9f9f9;
+            overflow: hidden;
+        }
+        #preview-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        #action-display {
+            padding: 10px;
+            background: #e8f4f8;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .log-entry {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            font-family: monospace;
+        }
+        .success { color: #0a0; }
+        .warning { color: #a50; }
+        .error { color: #a00; }
+    </style>
+</head>
+<body>
+    <h1>🌐 Real Web Visitor</h1>
+    
+    <div class="panel">
+        <h3>Einstellungen</h3>
+        <div>
+            <label for="target-url">Ziel-URL:</label>
+            <input type="text" id="target-url" placeholder="https://www.example.com">
+        </div>
+        
+        <div>
+            <label for="user-agents">User Agents (je Zeile einer):</label>
+            <textarea id="user-agents" rows="3">Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36
+Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1</textarea>
+        </div>
+        
+        <div>
+            <label for="behavior-profile">Verhaltensprofil:</label>
+            <select id="behavior-profile">
+                <option value="casual">Gelegentlicher Leser (langsam)</option>
+                <option value="researcher">Forscher (viele Klicks)</option>
+                <option value="shopper">Einkäufer (schnelles Scrollen)</option>
+            </select>
+        </div>
+        
+        <div>
+            <button id="start-btn">Start</button>
+            <button id="stop-btn" disabled>Stop</button>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h3>Live-Vorschau</h3>
+        <div id="action-display">Bereit zum Starten...</div>
+        <div id="preview-container">
+            <iframe id="preview-iframe" sandbox="allow-same-origin allow-scripts allow-forms"></iframe>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h3>Aktivitätsprotokoll</h3>
+        <div id="log-container"></div>
+    </div>
+
+    <script>
+        // Konfiguration
+        const config = {
+            profiles: {
+                casual: { minDelay: 3, maxDelay: 8, clickChance: 0.3 },
+                researcher: { minDelay: 1, maxDelay: 4, clickChance: 0.7 },
+                shopper: { minDelay: 0.5, maxDelay: 2, clickChance: 0.5 }
+            },
+            actions: [
+                "Lese Inhalte...",
+                "Scrolle Seite...",
+                "Überprüfe Menüs...",
+                "Schau mir Bilder an...",
+                "Suche nach Informationen...",
+                "Klicke auf interessanten Link..."
+            ]
+        };
+        
+        // Zustandsvariablen
+        let isRunning = false;
+        let currentSession = null;
+        
+        // DOM-Elemente
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const targetUrlInput = document.getElementById('target-url');
+        const userAgentsInput = document.getElementById('user-agents');
+        const behaviorProfileSelect = document.getElementById('behavior-profile');
+        const previewIframe = document.getElementById('preview-iframe');
+        const actionDisplay = document.getElementById('action-display');
+        const logContainer = document.getElementById('log-container');
+        
+        // Hilfsfunktionen
+        function logMessage(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        function getRandomUserAgent() {
+            const agents = userAgentsInput.value.split('\n').filter(a => a.trim());
+            return agents.length > 0 ? agents[Math.floor(Math.random() * agents.length)] : '';
+        }
+        
+        function simulateHumanDelay() {
+            const profile = config.profiles[behaviorProfileSelect.value];
+            return (Math.random() * (profile.maxDelay - profile.minDelay) + profile.minDelay) * 1000;
+        }
+        
+        function getRandomAction() {
+            return config.actions[Math.floor(Math.random() * config.actions.length)];
+        }
+        
+        function simulateClick(element) {
+            const rect = element.getBoundingClientRect();
+            const x = rect.left + rect.width * 0.3 + Math.random() * rect.width * 0.4;
+            const y = rect.top + rect.height * 0.3 + Math.random() * rect.height * 0.4;
+            
+            return [
+                { type: 'mousemove', x, y },
+                { type: 'mousedown', x, y },
+                { type: 'mouseup', x, y },
+                { type: 'click', x, y }
+            ];
+        }
+        
+        function getRandomLink(doc) {
+            const links = Array.from(doc.getElementsByTagName('a')).filter(a => {
+                return a.href && !a.href.startsWith('javascript:') && a.href !== doc.location.href;
+            });
+            return links.length > 0 ? links[Math.floor(Math.random() * links.length)] : null;
+        }
+        
+        async function startVisit() {
+            const url = targetUrlInput.value.trim();
+            if (!url) {
+                logMessage('Bitte eine gültige URL eingeben', 'error');
+                return;
+            }
+            
+            isRunning = true;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            
+            logMessage(`Starte Besuch von: ${url}`, 'success');
+            
+            try {
+                // Setze zufälligen User-Agent
+                const userAgent = getRandomUserAgent();
+                if (userAgent) {
+                    Object.defineProperty(navigator, 'userAgent', {
+                        value: userAgent,
+                        configurable: true
+                    });
+                }
+                
+                // Lade die Zielseite
+                previewIframe.src = url;
+                actionDisplay.textContent = "Lade Seite...";
+                
+                await new Promise(resolve => {
+                    previewIframe.onload = resolve;
+                });
+                
+                const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
+                
+                // Hauptbesuchsschleife
+                while (isRunning) {
+                    // Zufällige Aktion anzeigen
+                    const action = getRandomAction();
+                    actionDisplay.textContent = `Aktion: ${action}`;
+                    
+                    // Menschliche Verzögerung
+                    const delay = simulateHumanDelay();
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    
+                    // Mit zufälliger Wahrscheinlichkeit klicken
+                    const profile = config.profiles[behaviorProfileSelect.value];
+                    if (Math.random() < profile.clickChance) {
+                        const link = getRandomLink(iframeDoc);
+                        if (link) {
+                            const clickEvents = simulateClick(link);
+                            clickEvents.forEach(event => {
+                                const evt = new MouseEvent(event.type, {
+                                    view: window,
+                                    bubbles: true,
+                                    cancelable: true,
+                                    clientX: event.x,
+                                    clientY: event.y
+                                });
+                                link.dispatchEvent(evt);
+                            });
+                            logMessage(`Klick auf: ${link.href}`, 'warning');
+                        }
+                    }
+                    
+                    // Zufälliges Scrollen
+                    const scrollAmount = Math.floor(Math.random() * 500) + 100;
+                    iframeDoc.documentElement.scrollTop += scrollAmount;
+                }
+                
+            } catch (error) {
+                logMessage(`Fehler: ${error.message}`, 'error');
+            } finally {
+                stopVisit();
+            }
+        }
+        
+        function stopVisit() {
+            isRunning = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            actionDisplay.textContent = "Besuch beendet";
+            logMessage("Besuch gestoppt", 'info');
+        }
+        
+        // Event Listener
+        startBtn.addEventListener('click', startVisit);
+        stopBtn.addEventListener('click', stopVisit);
+        
+        // Initialisierung
+        logMessage('System bereit. Geben Sie eine URL ein und klicken Sie auf Start.', 'success');
+    </script>
+</body>
+</html>
