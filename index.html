@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Web Visitor</title>
+    <title>Advanced Web Visitor</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -70,24 +70,28 @@
             grid-template-columns: 1fr 1fr;
             gap: 15px;
         }
-        #proxy-status {
+        #visit-counter {
             font-weight: bold;
             margin: 10px 0;
+            font-size: 1.2em;
         }
     </style>
 </head>
 <body>
-    <h1>🌐 Live Web Visitor</h1>
+    <h1>🌐 Advanced Web Visitor</h1>
     
     <div class="panel">
         <h3>Einstellungen</h3>
         <div class="grid">
             <div>
-                <label for="target-url">Ziel-URL:</label>
-                <input type="text" id="target-url" placeholder="https://www.example.com" value="https://www.google.com">
+                <label for="keywords">Keywords (je Zeile eines):</label>
+                <textarea id="keywords" rows="3" placeholder="günstige Hotels Berlin"></textarea>
                 
-                <label for="visit-duration">Besuchsdauer (Sekunden):</label>
-                <input type="number" id="visit-duration" min="10" value="30">
+                <label for="target-url">Basis-URL:</label>
+                <input type="text" id="target-url" placeholder="https://www.example.com" value="https://www.google.com/search?q=">
+                
+                <label for="visit-count">Anzahl Besuche:</label>
+                <input type="number" id="visit-count" min="1" value="5">
             </div>
             <div>
                 <label for="user-agent">User Agent:</label>
@@ -104,8 +108,13 @@
                     <option value="active">Aktiv</option>
                     <option value="reader">Leseintensiv</option>
                 </select>
+                
+                <label for="visit-duration">Besuchsdauer (Sekunden):</label>
+                <input type="number" id="visit-duration" min="10" value="30">
             </div>
         </div>
+        
+        <div id="visit-counter">Verbleibende Besuche: 0</div>
         
         <button id="start-btn">Start</button>
         <button id="stop-btn" disabled>Stop</button>
@@ -141,14 +150,19 @@
         
         // Zustandsvariablen
         let isRunning = false;
+        let remainingVisits = 0;
+        let totalVisits = 0;
         
         // DOM-Elemente
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
+        const keywordsInput = document.getElementById('keywords');
         const targetUrlInput = document.getElementById('target-url');
-        const visitDurationInput = document.getElementById('visit-duration');
+        const visitCountInput = document.getElementById('visit-count');
         const userAgentSelect = document.getElementById('user-agent');
         const behaviorSelect = document.getElementById('behavior');
+        const visitDurationInput = document.getElementById('visit-duration');
+        const visitCounter = document.getElementById('visit-counter');
         const previewIframe = document.getElementById('preview-iframe');
         const actionDisplay = document.getElementById('action-display');
         const logContainer = document.getElementById('log-container');
@@ -160,6 +174,10 @@
             entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
             logContainer.appendChild(entry);
             logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        function updateCounter() {
+            visitCounter.textContent = `Verbleibende Besuche: ${remainingVisits}/${totalVisits}`;
         }
         
         function getRandomDelay() {
@@ -182,12 +200,33 @@
             return actions[Math.floor(Math.random() * actions.length)];
         }
         
+        function getRandomKeyword() {
+            const keywords = keywordsInput.value.split('\n').filter(k => k.trim());
+            return keywords.length > 0 ? keywords[Math.floor(Math.random() * keywords.length)] : null;
+        }
+        
+        function buildUrl() {
+            const baseUrl = targetUrlInput.value.trim();
+            const keyword = getRandomKeyword();
+            
+            if (keyword && baseUrl.includes('?')) {
+                return `${baseUrl}${encodeURIComponent(keyword)}`;
+            } else if (keyword) {
+                return `${baseUrl}?q=${encodeURIComponent(keyword)}`;
+            }
+            return baseUrl;
+        }
+        
         async function startVisit() {
-            const url = targetUrlInput.value.trim();
+            const url = buildUrl();
             if (!url) {
                 logMessage('Bitte eine gültige URL eingeben', 'error');
                 return;
             }
+            
+            totalVisits = parseInt(visitCountInput.value);
+            remainingVisits = totalVisits;
+            updateCounter();
             
             isRunning = true;
             startBtn.disabled = true;
@@ -200,33 +239,51 @@
                 configurable: true
             });
             
-            logMessage(`Starte Besuch von: ${url}`, 'success');
+            logMessage(`Starte ${totalVisits} Besuche`, 'success');
             logMessage(`User Agent: ${userAgent}`, 'info');
             
-            // Lade die Zielseite
-            previewIframe.src = url;
-            actionDisplay.textContent = "Lade Seite...";
-            
-            await new Promise(resolve => {
-                previewIframe.onload = resolve;
-            });
-            
-            const startTime = Date.now();
-            const visitDuration = parseInt(visitDurationInput.value) * 1000;
-            
-            // Hauptbesuchsschleife
-            while (isRunning && (Date.now() - startTime) < visitDuration) {
-                // Zufällige Aktion anzeigen
-                const action = simulateHumanAction();
-                actionDisplay.textContent = `Aktion: ${action}`;
+            while (isRunning && remainingVisits > 0) {
+                const currentUrl = buildUrl();
+                logMessage(`Starte Besuch ${totalVisits - remainingVisits + 1}/${totalVisits}: ${currentUrl}`, 'success');
                 
-                // Menschliche Verzögerung
-                const delay = getRandomDelay();
-                await new Promise(resolve => setTimeout(resolve, delay));
+                // Lade die Zielseite
+                previewIframe.src = currentUrl;
+                actionDisplay.textContent = "Lade Seite...";
+                
+                await new Promise(resolve => {
+                    previewIframe.onload = resolve;
+                });
+                
+                const startTime = Date.now();
+                const visitDuration = parseInt(visitDurationInput.value) * 1000;
+                
+                // Hauptbesuchsschleife
+                while (isRunning && (Date.now() - startTime) < visitDuration) {
+                    // Zufällige Aktion anzeigen
+                    const action = simulateHumanAction();
+                    actionDisplay.textContent = `Besuch ${totalVisits - remainingVisits + 1}/${totalVisits} | ${action}`;
+                    
+                    // Menschliche Verzögerung
+                    const delay = getRandomDelay();
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+                
+                if (isRunning) {
+                    remainingVisits--;
+                    updateCounter();
+                    logMessage(`Besuch ${totalVisits - remainingVisits}/${totalVisits} abgeschlossen`, 'success');
+                    
+                    // Pause zwischen Besuchen
+                    if (remainingVisits > 0) {
+                        const pause = Math.floor(Math.random() * 10000) + 5000; // 5-15s
+                        logMessage(`Pause für ${Math.round(pause/1000)}s...`, 'info');
+                        await new Promise(resolve => setTimeout(resolve, pause));
+                    }
+                }
             }
             
             if (isRunning) {
-                logMessage("Besuch erfolgreich abgeschlossen", 'success');
+                logMessage("Alle Besuche abgeschlossen!", 'success');
             }
             
             stopVisit();
@@ -244,7 +301,8 @@
         stopBtn.addEventListener('click', stopVisit);
         
         // Initialisierung
-        logMessage('System bereit. Geben Sie eine URL ein und klicken Sie auf Start.', 'success');
+        logMessage('System bereit. Konfigurieren Sie die Einstellungen und klicken Sie auf Start.', 'success');
+        updateCounter();
     </script>
 </body>
 </html>
