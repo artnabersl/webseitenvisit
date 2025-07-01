@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real Web Visitor</title>
+    <title>Advanced Web Visitor</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -65,36 +65,67 @@
         .success { color: #0a0; }
         .warning { color: #a50; }
         .error { color: #a00; }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
     </style>
 </head>
 <body>
-    <h1>🌐 Real Web Visitor</h1>
+    <h1>🌐 Advanced Web Visitor</h1>
     
     <div class="panel">
         <h3>Einstellungen</h3>
-        <div>
-            <label for="target-url">Ziel-URL:</label>
-            <input type="text" id="target-url" placeholder="https://www.example.com">
-        </div>
-        
-        <div>
-            <label for="user-agents">User Agents (je Zeile einer):</label>
-            <textarea id="user-agents" rows="3">Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36
+        <div class="grid">
+            <div>
+                <label for="keywords">Keywords (je Zeile eines):</label>
+                <textarea id="keywords" rows="4"></textarea>
+                
+                <label for="target-url">Ziel-URL:</label>
+                <input type="text" id="target-url" placeholder="https://www.example.com">
+                
+                <label for="visit-count">Anzahl Besuche:</label>
+                <input type="number" id="visit-count" min="1" value="5">
+            </div>
+            
+            <div>
+                <label for="user-agents">User Agents (je Zeile einer):</label>
+                <textarea id="user-agents" rows="3">Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36
 Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1</textarea>
-        </div>
-        
-        <div>
-            <label for="behavior-profile">Verhaltensprofil:</label>
-            <select id="behavior-profile">
-                <option value="casual">Gelegentlicher Leser (langsam)</option>
-                <option value="researcher">Forscher (viele Klicks)</option>
-                <option value="shopper">Einkäufer (schnelles Scrollen)</option>
-            </select>
+                
+                <label for="behavior-profile">Verhaltensprofil:</label>
+                <select id="behavior-profile">
+                    <option value="casual">Gelegentlicher Leser (langsam)</option>
+                    <option value="researcher">Forscher (viele Klicks)</option>
+                    <option value="shopper">Einkäufer (schnelles Scrollen)</option>
+                </select>
+                
+                <label for="visit-duration">Besuchsdauer (Sekunden):</label>
+                <input type="number" id="visit-duration" min="10" value="30">
+            </div>
         </div>
         
         <div>
             <button id="start-btn">Start</button>
             <button id="stop-btn" disabled>Stop</button>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h3>Proxy-Einstellungen</h3>
+        <div class="grid">
+            <div>
+                <label for="proxy-list">Proxies (IP:Port - je Zeile einer):</label>
+                <textarea id="proxy-list" rows="3" placeholder="103.123.231.202:8080\n45.95.147.222:8080"></textarea>
+            </div>
+            <div>
+                <label for="current-proxy">Aktiver Proxy:</label>
+                <input type="text" id="current-proxy" readonly>
+                
+                <button id="test-proxy-btn">Proxies testen</button>
+                <div id="proxy-test-result"></div>
+            </div>
         </div>
     </div>
     
@@ -132,13 +163,22 @@ Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHT
         // Zustandsvariablen
         let isRunning = false;
         let currentSession = null;
+        let workingProxies = [];
+        let currentVisitCount = 0;
         
         // DOM-Elemente
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
+        const testProxyBtn = document.getElementById('test-proxy-btn');
+        const keywordsInput = document.getElementById('keywords');
         const targetUrlInput = document.getElementById('target-url');
+        const visitCountInput = document.getElementById('visit-count');
         const userAgentsInput = document.getElementById('user-agents');
         const behaviorProfileSelect = document.getElementById('behavior-profile');
+        const visitDurationInput = document.getElementById('visit-duration');
+        const proxyListInput = document.getElementById('proxy-list');
+        const currentProxyInput = document.getElementById('current-proxy');
+        const proxyTestResult = document.getElementById('proxy-test-result');
         const previewIframe = document.getElementById('preview-iframe');
         const actionDisplay = document.getElementById('action-display');
         const logContainer = document.getElementById('log-container');
@@ -157,6 +197,11 @@ Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHT
             return agents.length > 0 ? agents[Math.floor(Math.random() * agents.length)] : '';
         }
         
+        function getRandomProxy() {
+            if (workingProxies.length === 0) return null;
+            return workingProxies[Math.floor(Math.random() * workingProxies.length)];
+        }
+        
         function simulateHumanDelay() {
             const profile = config.profiles[behaviorProfileSelect.value];
             return (Math.random() * (profile.maxDelay - profile.minDelay) + profile.minDelay) * 1000;
@@ -166,105 +211,144 @@ Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHT
             return config.actions[Math.floor(Math.random() * config.actions.length)];
         }
         
-        function simulateClick(element) {
-            const rect = element.getBoundingClientRect();
-            const x = rect.left + rect.width * 0.3 + Math.random() * rect.width * 0.4;
-            const y = rect.top + rect.height * 0.3 + Math.random() * rect.height * 0.4;
+        async function testProxies() {
+            const proxies = proxyListInput.value.split('\n').filter(p => p.trim());
+            if (proxies.length === 0) {
+                logMessage('Keine Proxies zum Testen eingegeben', 'error');
+                return;
+            }
             
-            return [
-                { type: 'mousemove', x, y },
-                { type: 'mousedown', x, y },
-                { type: 'mouseup', x, y },
-                { type: 'click', x, y }
-            ];
-        }
-        
-        function getRandomLink(doc) {
-            const links = Array.from(doc.getElementsByTagName('a')).filter(a => {
-                return a.href && !a.href.startsWith('javascript:') && a.href !== doc.location.href;
-            });
-            return links.length > 0 ? links[Math.floor(Math.random() * links.length)] : null;
+            testProxyBtn.disabled = true;
+            proxyTestResult.textContent = "Teste Proxies...";
+            
+            workingProxies = [];
+            let tested = 0;
+            
+            for (const proxy of proxies) {
+                if (!isRunning) {
+                    try {
+                        // Einfacher Test mit einem Timeout
+                        const controller = new AbortController();
+                        const timeout = setTimeout(() => controller.abort(), 5000);
+                        
+                        const test = await fetch('https://httpbin.org/ip', {
+                            signal: controller.signal
+                        });
+                        
+                        clearTimeout(timeout);
+                        
+                        if (test.ok) {
+                            workingProxies.push(proxy);
+                            logMessage(`✅ Proxy funktioniert: ${proxy}`, 'success');
+                        }
+                    } catch (e) {
+                        logMessage(`❌ Proxy fehlgeschlagen: ${proxy}`, 'error');
+                    }
+                    
+                    tested++;
+                    proxyTestResult.textContent = `Getestet: ${tested}/${proxies.length} - Funktioniert: ${workingProxies.length}`;
+                    
+                    // Kleine Pause zwischen Tests
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+            
+            proxyTestResult.textContent = `Fertig! ${workingProxies.length}/${proxies.length} Proxies funktionieren`;
+            testProxyBtn.disabled = false;
+            currentProxyInput.value = workingProxies.length > 0 ? workingProxies[0] : "Keine funktionierenden Proxies";
+            
+            if (workingProxies.length === 0) {
+                logMessage('Keine funktionierenden Proxies gefunden!', 'error');
+            } else {
+                logMessage(`Verfügbare Proxies: ${workingProxies.join(', ')}`, 'success');
+            }
         }
         
         async function startVisit() {
             const url = targetUrlInput.value.trim();
+            const keywords = keywordsInput.value.split('\n').filter(k => k.trim());
+            const totalVisits = parseInt(visitCountInput.value);
+            const visitDuration = parseInt(visitDurationInput.value) * 1000;
+            
             if (!url) {
                 logMessage('Bitte eine gültige URL eingeben', 'error');
+                return;
+            }
+            
+            if (workingProxies.length === 0 && proxyListInput.value.trim() !== "") {
+                logMessage('Keine funktionierenden Proxies - bitte zuerst testen', 'error');
                 return;
             }
             
             isRunning = true;
             startBtn.disabled = true;
             stopBtn.disabled = false;
+            testProxyBtn.disabled = true;
+            currentVisitCount = 0;
             
-            logMessage(`Starte Besuch von: ${url}`, 'success');
-            
-            try {
-                // Setze zufälligen User-Agent
-                const userAgent = getRandomUserAgent();
-                if (userAgent) {
-                    Object.defineProperty(navigator, 'userAgent', {
-                        value: userAgent,
-                        configurable: true
-                    });
-                }
+            // Hauptbesuchsschleife
+            while (isRunning && currentVisitCount < totalVisits) {
+                currentVisitCount++;
+                const currentProxy = getRandomProxy();
+                currentProxyInput.value = currentProxy || "Direkter Zugriff";
                 
-                // Lade die Zielseite
-                previewIframe.src = url;
-                actionDisplay.textContent = "Lade Seite...";
+                const keyword = keywords.length > 0 ? keywords[Math.floor(Math.random() * keywords.length)] : "";
+                const visitUrl = keyword ? `${url}?q=${encodeURIComponent(keyword)}` : url;
                 
-                await new Promise(resolve => {
-                    previewIframe.onload = resolve;
-                });
+                logMessage(`Starte Besuch ${currentVisitCount}/${totalVisits}: ${visitUrl} ${currentProxy ? `via ${currentProxy}` : ''}`, 'success');
                 
-                const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
-                
-                // Hauptbesuchsschleife
-                while (isRunning) {
-                    // Zufällige Aktion anzeigen
-                    const action = getRandomAction();
-                    actionDisplay.textContent = `Aktion: ${action}`;
-                    
-                    // Menschliche Verzögerung
-                    const delay = simulateHumanDelay();
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    
-                    // Mit zufälliger Wahrscheinlichkeit klicken
-                    const profile = config.profiles[behaviorProfileSelect.value];
-                    if (Math.random() < profile.clickChance) {
-                        const link = getRandomLink(iframeDoc);
-                        if (link) {
-                            const clickEvents = simulateClick(link);
-                            clickEvents.forEach(event => {
-                                const evt = new MouseEvent(event.type, {
-                                    view: window,
-                                    bubbles: true,
-                                    cancelable: true,
-                                    clientX: event.x,
-                                    clientY: event.y
-                                });
-                                link.dispatchEvent(evt);
-                            });
-                            logMessage(`Klick auf: ${link.href}`, 'warning');
-                        }
+                try {
+                    // Setze zufälligen User-Agent
+                    const userAgent = getRandomUserAgent();
+                    if (userAgent) {
+                        Object.defineProperty(navigator, 'userAgent', {
+                            value: userAgent,
+                            configurable: true
+                        });
                     }
                     
-                    // Zufälliges Scrollen
-                    const scrollAmount = Math.floor(Math.random() * 500) + 100;
-                    iframeDoc.documentElement.scrollTop += scrollAmount;
+                    // Lade die Zielseite
+                    previewIframe.src = visitUrl;
+                    actionDisplay.textContent = "Lade Seite...";
+                    
+                    await new Promise(resolve => {
+                        previewIframe.onload = resolve;
+                        setTimeout(resolve, 10000); // Timeout nach 10 Sekunden
+                    });
+                    
+                    const startTime = Date.now();
+                    
+                    // Besuchsschleife für die Dauer des Besuchs
+                    while (isRunning && (Date.now() - startTime) < visitDuration) {
+                        // Zufällige Aktion anzeigen
+                        const action = getRandomAction();
+                        actionDisplay.textContent = `Besuch ${currentVisitCount}/${totalVisits} | ${action}`;
+                        
+                        // Menschliche Verzögerung
+                        const delay = simulateHumanDelay();
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                    
+                } catch (error) {
+                    logMessage(`Fehler: ${error.message}`, 'error');
+                } finally {
+                    if (isRunning && currentVisitCount < totalVisits) {
+                        const pause = Math.floor(Math.random() * 10000) + 5000; // 5-15s Pause
+                        logMessage(`Pause für ${Math.round(pause/1000)}s vor nächstem Besuch...`, 'info');
+                        await new Promise(resolve => setTimeout(resolve, pause));
+                    }
                 }
-                
-            } catch (error) {
-                logMessage(`Fehler: ${error.message}`, 'error');
-            } finally {
-                stopVisit();
             }
+            
+            stopVisit();
+            logMessage(`Alle ${totalVisits} Besuche abgeschlossen!`, 'success');
         }
         
         function stopVisit() {
             isRunning = false;
             startBtn.disabled = false;
             stopBtn.disabled = true;
+            testProxyBtn.disabled = false;
             actionDisplay.textContent = "Besuch beendet";
             logMessage("Besuch gestoppt", 'info');
         }
@@ -272,9 +356,10 @@ Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHT
         // Event Listener
         startBtn.addEventListener('click', startVisit);
         stopBtn.addEventListener('click', stopVisit);
+        testProxyBtn.addEventListener('click', testProxies);
         
         // Initialisierung
-        logMessage('System bereit. Geben Sie eine URL ein und klicken Sie auf Start.', 'success');
+        logMessage('System bereit. Konfigurieren Sie die Einstellungen und klicken Sie auf Start.', 'success');
     </script>
 </body>
 </html>
